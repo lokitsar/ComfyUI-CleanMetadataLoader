@@ -69,7 +69,7 @@ Inputs:
 - `directory`: folder containing source images.
 - `pattern`: semicolon-separated filename globs, for example `*.png;*.jpg;*.webp`.
 - `mode`: `incremental`, `index`, or `random`.
-- `index`: starting image index for `incremental`, or exact wrapped index for `index`.
+- `index`: selected image index for `incremental` and `index`; values wrap around the matched file count.
 - `batch_size`: kept only for compatibility with older saved workflows; the node still loads one image per execution.
 - `seed`: random seed used by `random`.
 - `recursive`: include subfolders.
@@ -78,6 +78,8 @@ Inputs:
 - `clean_suffix`: suffix added before the file extension.
 - `remove_prompt_json`: also remove ComfyUI's `prompt` JSON. Leave this `False` for Civitai-style readable generation metadata.
 - `extract_generation_metadata`: recover prompts from the workflow/custom text nodes and write them into readable metadata before stripping `workflow`.
+
+For folder-by-folder processing, set `mode=incremental` and set the `index` widget's ComfyUI control-after-generate behavior to increment. `batch_size` is intentionally ignored; the node processes one image per execution.
 
 Outputs:
 

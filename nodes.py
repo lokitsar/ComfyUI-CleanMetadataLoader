@@ -75,17 +75,12 @@ def _resolve_input_image(image_name):
     return Path(image_name).expanduser()
 
 
-def _counter_key(directory, pattern, recursive):
-    return f"{Path(directory).expanduser()}|{pattern}|{recursive}"
-
-
-def _select_file(files, mode, index, seed, counter_key, counters):
+def _select_file(files, mode, index, seed):
     if not files:
         raise FileNotFoundError("No image files matched the directory and pattern.")
 
     if mode == "incremental":
-        current_index = counters.get(counter_key, index) % len(files)
-        counters[counter_key] = current_index + 1
+        current_index = index % len(files)
         return files[current_index], current_index
 
     if mode == "random":
@@ -772,8 +767,6 @@ def _image_to_tensor(image):
 
 
 class LoadCleanImageFromDirectory:
-    _incremental_indexes = {}
-
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -814,8 +807,6 @@ class LoadCleanImageFromDirectory:
         remove_prompt_json=False,
         extract_generation_metadata=True,
     ):
-        if mode == "incremental":
-            return random.random()
         return (
             directory,
             pattern,
@@ -847,8 +838,7 @@ class LoadCleanImageFromDirectory:
         extract_generation_metadata=True,
     ):
         files = _list_images(directory, pattern, _bool(recursive))
-        key = _counter_key(directory, pattern, recursive)
-        source_path, current_index = _select_file(files, mode, index, seed, key, self._incremental_indexes)
+        source_path, current_index = _select_file(files, mode, index, seed)
 
         clean_root = output_directory.strip() or directory
         return self._load_path(
