@@ -60,7 +60,7 @@ Outputs:
 
 ### `image/metadata -> Clean Metadata Loader`
 
-The same node is also registered as `Clean Metadata Directory Loader` and `Load Clean Image(s) From Directory` so it is easier to find from ComfyUI's node search.
+Legacy aliases are also registered as `Clean Metadata Directory Loader (Legacy)` and `Load Clean Image(s) From Directory (Legacy)` so older saved workflows still load.
 
 This loads one image at a time from a directory and can optionally save a workflow-stripped copy of that selected image. It intentionally loads a single file per execution to avoid ComfyUI batch errors when directory images have different dimensions.
 
@@ -73,7 +73,6 @@ Inputs:
 - `batch_size`: kept only for compatibility with older saved workflows; the node still loads one image per execution.
 - `seed`: random seed used by `random`.
 - `recursive`: include subfolders.
-- `fit`: use `original`, or `pad`, `crop`, or `stretch` to force a specific output size.
 - `save_clean_copy`: writes cleaned image files when enabled.
 - `output_directory`: where cleaned copies are saved. Empty means save next to the source files.
 - `clean_suffix`: suffix added before the file extension.
@@ -83,7 +82,6 @@ Inputs:
 Outputs:
 
 - `image`: ComfyUI image tensor.
-- `mask`: alpha-derived mask tensor.
 - `path`: cleaned path if cleaning is enabled, otherwise source path.
 - `metadata_json`: JSON report containing source path, cleaned path, selected index, total count, removed keys, and preserved metadata summary.
 - `index`: selected file index.

@@ -737,37 +737,14 @@ def _save_clean_copy(
     return str(target), removed, generation_data
 
 
-def _fit_image(image, mode, width, height):
-    if mode == "original":
-        return image
-
-    size = (max(width, 1), max(height, 1))
-    if mode == "stretch":
-        return image.resize(size, RESAMPLE)
-
-    if mode == "crop":
-        return ImageOps.fit(image, size, method=RESAMPLE, centering=(0.5, 0.5))
-
-    if mode == "pad":
-        fitted = ImageOps.contain(image, size, method=RESAMPLE)
-        canvas = Image.new("RGBA", size, (0, 0, 0, 0))
-        canvas.alpha_composite(fitted.convert("RGBA"), ((size[0] - fitted.width) // 2, (size[1] - fitted.height) // 2))
-        return canvas
-
-    return image
-
-
-def _image_to_tensors(image):
+def _image_to_tensor(image):
     image = ImageOps.exif_transpose(image)
     rgba = image.convert("RGBA")
 
     image_array = np.asarray(rgba.convert("RGB")).astype(np.float32) / 255.0
-    alpha_array = np.asarray(rgba.getchannel("A")).astype(np.float32) / 255.0
-    mask_array = 1.0 - alpha_array
 
     image_tensor = torch.from_numpy(image_array)[None,]
-    mask_tensor = torch.from_numpy(mask_array)[None,]
-    return image_tensor, mask_tensor
+    return image_tensor
 
 
 class LoadCleanImageFromDirectory:
@@ -784,9 +761,6 @@ class LoadCleanImageFromDirectory:
                 "batch_size": ("INT", {"default": 1, "min": 1, "max": 4096}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFF}),
                 "recursive": ("BOOLEAN", {"default": False}),
-                "fit": (["original", "pad", "crop", "stretch"], {"default": "original"}),
-                "width": ("INT", {"default": 1024, "min": 1, "max": 16384}),
-                "height": ("INT", {"default": 1024, "min": 1, "max": 16384}),
                 "save_clean_copy": ("BOOLEAN", {"default": True}),
                 "output_directory": ("STRING", {"default": "", "multiline": False}),
                 "clean_suffix": ("STRING", {"default": "_clean", "multiline": False}),
@@ -795,8 +769,8 @@ class LoadCleanImageFromDirectory:
             }
         }
 
-    RETURN_TYPES = ("IMAGE", "MASK", "STRING", "STRING", "INT", "INT")
-    RETURN_NAMES = ("image", "mask", "path", "metadata_json", "index", "total_count")
+    RETURN_TYPES = ("IMAGE", "STRING", "STRING", "INT", "INT")
+    RETURN_NAMES = ("image", "path", "metadata_json", "index", "total_count")
     FUNCTION = "load"
     CATEGORY = "image/metadata"
 
@@ -810,9 +784,6 @@ class LoadCleanImageFromDirectory:
         batch_size,
         seed,
         recursive,
-        fit,
-        width,
-        height,
         save_clean_copy,
         output_directory,
         clean_suffix,
@@ -829,9 +800,6 @@ class LoadCleanImageFromDirectory:
             batch_size,
             seed,
             recursive,
-            fit,
-            width,
-            height,
             save_clean_copy,
             output_directory,
             clean_suffix,
@@ -848,9 +816,6 @@ class LoadCleanImageFromDirectory:
         batch_size,
         seed,
         recursive,
-        fit,
-        width,
-        height,
         save_clean_copy,
         output_directory,
         clean_suffix,
@@ -882,8 +847,7 @@ class LoadCleanImageFromDirectory:
             else:
                 generation_data = _extract_generation_data(opened) if _bool(extract_generation_metadata) else {}
 
-            tensor_image = _fit_image(source_image, fit, width, height)
-            image_tensor, mask_tensor = _image_to_tensors(tensor_image)
+            image_tensor = _image_to_tensor(source_image)
 
         metadata_record = {
             "source_path": str(source_path),
@@ -897,11 +861,104 @@ class LoadCleanImageFromDirectory:
 
         return (
             image_tensor,
-            mask_tensor,
             cleaned_path or str(source_path),
             json.dumps(metadata_record, indent=2, ensure_ascii=False),
             current_index,
             len(files),
+        )
+
+
+class LegacyLoadCleanImageFromDirectory(LoadCleanImageFromDirectory):
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "directory": ("STRING", {"default": "", "multiline": False}),
+                "pattern": ("STRING", {"default": "*.png;*.jpg;*.jpeg;*.webp", "multiline": False}),
+                "mode": (["incremental", "index", "random"], {"default": "incremental"}),
+                "index": ("INT", {"default": 0, "min": 0, "max": 1000000}),
+                "batch_size": ("INT", {"default": 1, "min": 1, "max": 4096}),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFF}),
+                "recursive": ("BOOLEAN", {"default": False}),
+                "fit": (["original", "pad", "crop", "stretch"], {"default": "original"}),
+                "width": ("INT", {"default": 1024, "min": 1, "max": 16384}),
+                "height": ("INT", {"default": 1024, "min": 1, "max": 16384}),
+                "save_clean_copy": ("BOOLEAN", {"default": True}),
+                "output_directory": ("STRING", {"default": "", "multiline": False}),
+                "clean_suffix": ("STRING", {"default": "_clean", "multiline": False}),
+                "remove_prompt_json": ("BOOLEAN", {"default": False}),
+                "extract_generation_metadata": ("BOOLEAN", {"default": True}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "STRING", "STRING", "INT", "INT")
+    RETURN_NAMES = ("image", "path", "metadata_json", "index", "total_count")
+
+    @classmethod
+    def IS_CHANGED(
+        cls,
+        directory,
+        pattern,
+        mode,
+        index,
+        batch_size,
+        seed,
+        recursive,
+        fit,
+        width,
+        height,
+        save_clean_copy,
+        output_directory,
+        clean_suffix,
+        remove_prompt_json=False,
+        extract_generation_metadata=True,
+    ):
+        return super().IS_CHANGED(
+            directory,
+            pattern,
+            mode,
+            index,
+            batch_size,
+            seed,
+            recursive,
+            save_clean_copy,
+            output_directory,
+            clean_suffix,
+            remove_prompt_json,
+            extract_generation_metadata,
+        )
+
+    def load(
+        self,
+        directory,
+        pattern,
+        mode,
+        index,
+        batch_size,
+        seed,
+        recursive,
+        fit,
+        width,
+        height,
+        save_clean_copy,
+        output_directory,
+        clean_suffix,
+        remove_prompt_json=False,
+        extract_generation_metadata=True,
+    ):
+        return super().load(
+            directory,
+            pattern,
+            mode,
+            index,
+            batch_size,
+            seed,
+            recursive,
+            save_clean_copy,
+            output_directory,
+            clean_suffix,
+            remove_prompt_json,
+            extract_generation_metadata,
         )
 
 
@@ -974,14 +1031,14 @@ class StripWorkflowFromDirectory:
 
 NODE_CLASS_MAPPINGS = {
     "CleanMetadataLoader": LoadCleanImageFromDirectory,
-    "CleanMetadataDirectoryLoader": LoadCleanImageFromDirectory,
-    "LoadCleanImageFromDirectory": LoadCleanImageFromDirectory,
+    "CleanMetadataDirectoryLoader": LegacyLoadCleanImageFromDirectory,
+    "LoadCleanImageFromDirectory": LegacyLoadCleanImageFromDirectory,
     "StripWorkflowFromDirectory": StripWorkflowFromDirectory,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "CleanMetadataLoader": "Clean Metadata Loader",
-    "CleanMetadataDirectoryLoader": "Clean Metadata Directory Loader",
-    "LoadCleanImageFromDirectory": "Load Clean Image(s) From Directory",
+    "CleanMetadataDirectoryLoader": "Clean Metadata Directory Loader (Legacy)",
+    "LoadCleanImageFromDirectory": "Load Clean Image(s) From Directory (Legacy)",
     "StripWorkflowFromDirectory": "Strip ComfyUI Workflow From Directory",
 }
