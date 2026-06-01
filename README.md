@@ -64,7 +64,7 @@ Legacy aliases are also registered as `Clean Metadata Directory Loader (Legacy)`
 
 This loads one image at a time from a directory and can optionally save a workflow-stripped copy of that selected image. It intentionally loads a single file per execution to avoid ComfyUI batch errors when directory images have different dimensions.
 
-You can also connect an `IMAGE` input, for example from ComfyUI's standard `Load Image` node. When `image` is connected, it overrides the directory loader. Because ComfyUI image tensors do not carry the source PNG metadata, fill `source_path` with the original image path when you want this node to strip workflow metadata from that file. If `source_path` is blank, the node passes the connected image through and reports that there was no metadata file to clean.
+You can also use the node's `input_image` upload/picker button for a single image. When `input_image` is selected, it overrides the directory loader and reads metadata directly from that file.
 
 Inputs:
 
@@ -80,8 +80,7 @@ Inputs:
 - `clean_suffix`: suffix added before the file extension.
 - `remove_prompt_json`: also remove ComfyUI's `prompt` JSON. Leave this `False` for Civitai-style readable generation metadata.
 - `extract_generation_metadata`: recover prompts from the workflow/custom text nodes and write them into readable metadata before stripping `workflow`.
-- `source_path`: optional original image path used when an `IMAGE` input is connected.
-- `image`: optional image input. When connected, it overrides `directory`.
+- `input_image`: optional ComfyUI input image picker. When selected, it overrides `directory`.
 
 Outputs:
 

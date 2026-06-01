@@ -8,6 +8,11 @@ import numpy as np
 import torch
 from PIL import Image, ImageOps, PngImagePlugin
 
+try:
+    import folder_paths
+except ImportError:
+    folder_paths = None
+
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 WORKFLOW_METADATA_KEYS = {"workflow"}
@@ -49,6 +54,20 @@ def _list_images(directory, pattern, recursive):
             matches.append(path)
 
     return sorted(matches, key=lambda item: str(item).lower())
+
+
+def _comfy_input_images():
+    if folder_paths is None:
+        return [""]
+    return [""] + sorted(folder_paths.get_filename_list("input"))
+
+
+def _resolve_input_image(image_name):
+    if not image_name:
+        return None
+    if folder_paths is not None:
+        return Path(folder_paths.get_annotated_filepath(image_name))
+    return Path(image_name).expanduser()
 
 
 def _counter_key(directory, pattern, recursive):
@@ -766,10 +785,7 @@ class LoadCleanImageFromDirectory:
                 "clean_suffix": ("STRING", {"default": "_clean", "multiline": False}),
                 "remove_prompt_json": ("BOOLEAN", {"default": False}),
                 "extract_generation_metadata": ("BOOLEAN", {"default": True}),
-                "source_path": ("STRING", {"default": "", "multiline": False}),
-            },
-            "optional": {
-                "image": ("IMAGE",),
+                "input_image": (_comfy_input_images(), {"image_upload": True}),
             }
         }
 
@@ -793,23 +809,10 @@ class LoadCleanImageFromDirectory:
         clean_suffix,
         remove_prompt_json=False,
         extract_generation_metadata=True,
-        source_path="",
-        image=None,
+        input_image="",
     ):
-        source_path = source_path.strip()
-        if image is not None:
-            if mode == "incremental":
-                return random.random()
-            return (
-                "connected-image",
-                source_path,
-                save_clean_copy,
-                output_directory,
-                clean_suffix,
-                remove_prompt_json,
-                extract_generation_metadata,
-            )
-
+        if input_image:
+            return ("input_image", input_image, save_clean_copy, output_directory, clean_suffix, remove_prompt_json, extract_generation_metadata)
         if mode == "incremental":
             return random.random()
         return (
@@ -825,7 +828,7 @@ class LoadCleanImageFromDirectory:
             clean_suffix,
             remove_prompt_json,
             extract_generation_metadata,
-            source_path,
+            input_image,
         )
 
     def load(
@@ -842,16 +845,16 @@ class LoadCleanImageFromDirectory:
         clean_suffix,
         remove_prompt_json=False,
         extract_generation_metadata=True,
-        source_path="",
-        image=None,
+        input_image="",
     ):
-        source_path = source_path.strip()
-        if image is not None:
-            return self._load_connected_image(
-                image,
-                source_path,
+        input_path = _resolve_input_image(input_image)
+        if input_path is not None:
+            return self._load_path(
+                input_path,
+                0,
+                1,
+                output_directory.strip() or str(input_path.parent),
                 save_clean_copy,
-                output_directory,
                 clean_suffix,
                 remove_prompt_json,
                 extract_generation_metadata,
@@ -862,7 +865,28 @@ class LoadCleanImageFromDirectory:
         source_path, current_index = _select_file(files, mode, index, seed, key, self._incremental_indexes)
 
         clean_root = output_directory.strip() or directory
+        return self._load_path(
+            source_path,
+            current_index,
+            len(files),
+            clean_root,
+            save_clean_copy,
+            clean_suffix,
+            remove_prompt_json,
+            extract_generation_metadata,
+        )
 
+    def _load_path(
+        self,
+        source_path,
+        current_index,
+        total_count,
+        clean_root,
+        save_clean_copy,
+        clean_suffix,
+        remove_prompt_json,
+        extract_generation_metadata,
+    ):
         with Image.open(source_path) as opened:
             source_image = ImageOps.exif_transpose(opened)
             original_metadata = _metadata_dict(opened)
@@ -888,7 +912,7 @@ class LoadCleanImageFromDirectory:
             "source_path": str(source_path),
             "cleaned_path": cleaned_path,
             "selected_index": current_index,
-            "total_count": len(files),
+            "total_count": total_count,
             "removed_comfy_keys": removed,
             "extracted_generation_metadata": generation_data,
             "metadata": original_metadata,
@@ -899,66 +923,7 @@ class LoadCleanImageFromDirectory:
             cleaned_path or str(source_path),
             json.dumps(metadata_record, indent=2, ensure_ascii=False),
             current_index,
-            len(files),
-        )
-
-    def _load_connected_image(
-        self,
-        image,
-        source_path,
-        save_clean_copy,
-        output_directory,
-        clean_suffix,
-        remove_prompt_json,
-        extract_generation_metadata,
-    ):
-        cleaned_path = ""
-        removed = []
-        generation_data = {}
-        original_metadata = {}
-        warnings = []
-
-        if source_path:
-            path = Path(source_path).expanduser()
-            clean_root = output_directory.strip() or str(path.parent)
-            with Image.open(path) as opened:
-                source_image = ImageOps.exif_transpose(opened)
-                original_metadata = _metadata_dict(opened)
-
-                if _bool(save_clean_copy):
-                    cleaned_path, removed, generation_data = _save_clean_copy(
-                        source_image,
-                        path,
-                        clean_root,
-                        clean_suffix,
-                        metadata_source=opened,
-                        remove_prompt_json=_bool(remove_prompt_json),
-                        extract_generation_metadata=_bool(extract_generation_metadata),
-                    )
-                else:
-                    generation_data = _extract_generation_data(opened) if _bool(extract_generation_metadata) else {}
-        else:
-            warnings.append(
-                "Connected IMAGE inputs contain pixels only. Fill source_path with the original image path to strip embedded metadata."
-            )
-
-        metadata_record = {
-            "source_path": source_path,
-            "cleaned_path": cleaned_path,
-            "selected_index": 0,
-            "total_count": 1,
-            "removed_comfy_keys": removed,
-            "extracted_generation_metadata": generation_data,
-            "metadata": original_metadata,
-            "warnings": warnings,
-        }
-
-        return (
-            image,
-            cleaned_path or source_path or "<connected image>",
-            json.dumps(metadata_record, indent=2, ensure_ascii=False),
-            0,
-            1,
+            total_count,
         )
 
 
