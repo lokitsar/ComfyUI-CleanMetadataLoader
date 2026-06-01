@@ -56,10 +56,11 @@ def _list_images(directory, pattern, recursive):
     return sorted(matches, key=lambda item: str(item).lower())
 
 
-def _comfy_input_images():
+def _comfy_input_images(allow_blank=False):
     if folder_paths is None:
-        return [""]
-    return [""] + sorted(folder_paths.get_filename_list("input"))
+        return [""] if allow_blank else []
+    images = sorted(folder_paths.get_filename_list("input"))
+    return ([""] + images) if allow_blank else images
 
 
 def _resolve_input_image(image_name):
@@ -785,7 +786,6 @@ class LoadCleanImageFromDirectory:
                 "clean_suffix": ("STRING", {"default": "_clean", "multiline": False}),
                 "remove_prompt_json": ("BOOLEAN", {"default": False}),
                 "extract_generation_metadata": ("BOOLEAN", {"default": True}),
-                "input_image": (_comfy_input_images(), {"image_upload": True}),
             }
         }
 
@@ -809,10 +809,7 @@ class LoadCleanImageFromDirectory:
         clean_suffix,
         remove_prompt_json=False,
         extract_generation_metadata=True,
-        input_image="",
     ):
-        if input_image:
-            return ("input_image", input_image, save_clean_copy, output_directory, clean_suffix, remove_prompt_json, extract_generation_metadata)
         if mode == "incremental":
             return random.random()
         return (
@@ -828,7 +825,6 @@ class LoadCleanImageFromDirectory:
             clean_suffix,
             remove_prompt_json,
             extract_generation_metadata,
-            input_image,
         )
 
     def load(
@@ -845,21 +841,7 @@ class LoadCleanImageFromDirectory:
         clean_suffix,
         remove_prompt_json=False,
         extract_generation_metadata=True,
-        input_image="",
     ):
-        input_path = _resolve_input_image(input_image)
-        if input_path is not None:
-            return self._load_path(
-                input_path,
-                0,
-                1,
-                output_directory.strip() or str(input_path.parent),
-                save_clean_copy,
-                clean_suffix,
-                remove_prompt_json,
-                extract_generation_metadata,
-            )
-
         files = _list_images(directory, pattern, _bool(recursive))
         key = _counter_key(directory, pattern, recursive)
         source_path, current_index = _select_file(files, mode, index, seed, key, self._incremental_indexes)
@@ -1021,6 +1003,53 @@ class LegacyLoadCleanImageFromDirectory(LoadCleanImageFromDirectory):
         )
 
 
+class LoadCleanSingleImage:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image": (_comfy_input_images(), {"image_upload": True}),
+                "save_clean_copy": ("BOOLEAN", {"default": True}),
+                "output_directory": ("STRING", {"default": "", "multiline": False}),
+                "clean_suffix": ("STRING", {"default": "_clean", "multiline": False}),
+                "remove_prompt_json": ("BOOLEAN", {"default": False}),
+                "extract_generation_metadata": ("BOOLEAN", {"default": True}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "STRING", "STRING")
+    RETURN_NAMES = ("image", "path", "metadata_json")
+    FUNCTION = "load"
+    CATEGORY = "image/metadata"
+
+    def load(
+        self,
+        image,
+        save_clean_copy,
+        output_directory,
+        clean_suffix,
+        remove_prompt_json=False,
+        extract_generation_metadata=True,
+    ):
+        input_path = _resolve_input_image(image)
+        if input_path is None:
+            raise FileNotFoundError("No input image was selected.")
+
+        loader = LoadCleanImageFromDirectory()
+        image_tensor, path, metadata_json, _index, _total_count = loader._load_path(
+            input_path,
+            0,
+            1,
+            output_directory.strip() or str(input_path.parent),
+            save_clean_copy,
+            clean_suffix,
+            remove_prompt_json,
+            extract_generation_metadata,
+        )
+
+        return image_tensor, path, metadata_json
+
+
 class StripWorkflowFromDirectory:
     @classmethod
     def INPUT_TYPES(cls):
@@ -1090,6 +1119,7 @@ class StripWorkflowFromDirectory:
 
 NODE_CLASS_MAPPINGS = {
     "CleanMetadataLoader": LoadCleanImageFromDirectory,
+    "CleanMetadataImageLoader": LoadCleanSingleImage,
     "CleanMetadataDirectoryLoader": LegacyLoadCleanImageFromDirectory,
     "LoadCleanImageFromDirectory": LegacyLoadCleanImageFromDirectory,
     "StripWorkflowFromDirectory": StripWorkflowFromDirectory,
@@ -1097,6 +1127,7 @@ NODE_CLASS_MAPPINGS = {
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "CleanMetadataLoader": "Clean Metadata Loader",
+    "CleanMetadataImageLoader": "Clean Metadata Image Loader",
     "CleanMetadataDirectoryLoader": "Clean Metadata Directory Loader (Legacy)",
     "LoadCleanImageFromDirectory": "Load Clean Image(s) From Directory (Legacy)",
     "StripWorkflowFromDirectory": "Strip ComfyUI Workflow From Directory",

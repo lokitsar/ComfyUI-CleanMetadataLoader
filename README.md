@@ -64,8 +64,6 @@ Legacy aliases are also registered as `Clean Metadata Directory Loader (Legacy)`
 
 This loads one image at a time from a directory and can optionally save a workflow-stripped copy of that selected image. It intentionally loads a single file per execution to avoid ComfyUI batch errors when directory images have different dimensions.
 
-You can also use the node's `input_image` upload/picker button for a single image. When `input_image` is selected, it overrides the directory loader and reads metadata directly from that file.
-
 Inputs:
 
 - `directory`: folder containing source images.
@@ -80,7 +78,6 @@ Inputs:
 - `clean_suffix`: suffix added before the file extension.
 - `remove_prompt_json`: also remove ComfyUI's `prompt` JSON. Leave this `False` for Civitai-style readable generation metadata.
 - `extract_generation_metadata`: recover prompts from the workflow/custom text nodes and write them into readable metadata before stripping `workflow`.
-- `input_image`: optional ComfyUI input image picker. When selected, it overrides `directory`.
 
 Outputs:
 
@@ -89,6 +86,25 @@ Outputs:
 - `metadata_json`: JSON report containing source path, cleaned path, selected index, total count, removed keys, and preserved metadata summary.
 - `index`: selected file index.
 - `total_count`: number of matching images in the directory.
+
+### `image/metadata -> Clean Metadata Image Loader`
+
+Use this for a single image. It has a ComfyUI image upload/picker button and reads metadata directly from that selected file.
+
+Inputs:
+
+- `image`: ComfyUI input image picker.
+- `save_clean_copy`: writes a cleaned image file when enabled.
+- `output_directory`: where the cleaned copy is saved. Empty means save next to the source file.
+- `clean_suffix`: suffix added before the file extension.
+- `remove_prompt_json`: also remove ComfyUI's `prompt` JSON. Leave this `False` for Civitai-style readable generation metadata.
+- `extract_generation_metadata`: recover prompts from the workflow/custom text nodes and write them into readable metadata before stripping `workflow`.
+
+Outputs:
+
+- `image`: ComfyUI image tensor.
+- `path`: cleaned path if cleaning is enabled, otherwise source path.
+- `metadata_json`: JSON report containing source path, cleaned path, removed keys, and preserved metadata summary.
 
 ## Metadata Behavior
 
