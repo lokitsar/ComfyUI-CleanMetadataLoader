@@ -80,7 +80,7 @@ def _select_file(files, mode, index, seed):
         raise FileNotFoundError("No image files matched the directory and pattern.")
 
     if mode == "incremental":
-        current_index = index % len(files)
+        current_index = (index + seed) % len(files)
         return files[current_index], current_index
 
     if mode == "random":
