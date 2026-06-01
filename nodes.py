@@ -1,6 +1,7 @@
 import fnmatch
 import copy
 import json
+import os
 import random
 from pathlib import Path
 
@@ -59,7 +60,10 @@ def _list_images(directory, pattern, recursive):
 def _comfy_input_images(allow_blank=False):
     if folder_paths is None:
         return [""] if allow_blank else []
-    images = sorted(folder_paths.get_filename_list("input"))
+    input_dir = folder_paths.get_input_directory()
+    images = [f for f in os.listdir(input_dir) if os.path.isfile(os.path.join(input_dir, f))]
+    images = folder_paths.filter_files_content_types(images, ["image"])
+    images = sorted(images)
     return ([""] + images) if allow_blank else images
 
 
